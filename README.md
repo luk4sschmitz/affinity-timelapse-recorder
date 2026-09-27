@@ -66,15 +66,16 @@ Dê dois cliques em `tools\Instalar Video Automatico.bat`, uma vez por PC. Ele r
    - **Cadência**: a cada edição, ou intervalo fixo;
    - **Intervalo mínimo** entre frames e **duração máxima** da gravação.
 2. Trabalhe normalmente.
-3. Para parar, rode o script de novo e confirme. Em alguns segundos o Explorer abre com o MP4 pronto.
+3. Para parar, rode o script de novo. O diálogo mostra **quantos frames foram gravados** e tem um **slider de FPS (1 a 30)**. Ao mexer nele, o campo **Vídeo final (s)** mostra quantos segundos o vídeo terá. Menos fps deixa o vídeo mais lento e mais longo.
+4. Dê OK. Em alguns segundos o Explorer abre com o MP4 pronto.
 
 ## Pastas criadas
 
 ```
 Área de Trabalho\
   AffinityTimelapse\
-    _running\                    existe enquanto há uma gravação ativa
-    _stop\                       pedido de parada (criado pela 2ª execução)
+    _running\<sessão>\           existe enquanto há uma gravação ativa (indica a pasta da sessão)
+    _stop\fps_12\                pedido de parada com o fps escolhido (criado pela 2ª execução)
     MeuDocumento_20260927_101500\
       frame_00000.jpg ...        um frame por edição (ou por intervalo)
       _ultimo.jpg                último estado exportado (só durante a gravação)
@@ -86,7 +87,7 @@ As pastas com `_` são sinalizadores: o script e o vigia conversam por elas, por
 
 ## Como funciona
 
-1. **Liga/desliga por execução**: a 1ª execução configura e inicia; a 2ª cria `_stop`, e o gravador (que continua vivo em segundo plano) captura o frame final e encerra.
+1. **Liga/desliga por execução**: a 1ª execução configura e inicia. A 2ª conta os frames da sessão, pergunta o fps e cria `_stop\fps_N`. O gravador, que continua vivo em segundo plano, captura o frame final e encerra.
 2. **Detecção de edição pelo histórico**: um timer confere `doc.history.position/size` a cada 250 ms. Mudou (inclusive desfazer/refazer), a edição acabou de ser concluída.
 3. **Captura só depois de soltar o mouse**: exportar a tela enquanto você arrasta um objeto faz o Affinity se perder no arraste, e o objeto foge do cursor. Como o histórico só muda quando o mouse é solto, o script exporta **somente logo após uma edição concluída**, nunca em horário arbitrário. Cada export vai para um arquivo de reserva (`_ultimo.jpg`), e os frames são cópias dele.
    - **A cada edição**: um frame por edição concluída. Se ela chega antes do intervalo mínimo, aparece no frame seguinte.

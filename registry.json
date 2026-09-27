@@ -8,7 +8,7 @@
       "description": "Grava um timelapse do seu processo criativo: cada edicao real vira um frame; ao finalizar, o MP4 e gerado automaticamente pelo vigia do Windows (incluso no repositorio).",
       "author": "Lucas Schmitz (@luk4sschmitz)",
       "url": "https://github.com/luk4sschmitz/affinity-timelapse-recorder",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "category": "Export",
       "download_url": "https://raw.githubusercontent.com/luk4sschmitz/affinity-timelapse-recorder/main/timelapse-recorder.js"
     }

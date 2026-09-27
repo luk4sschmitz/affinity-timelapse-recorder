@@ -1,7 +1,7 @@
 /**
  * name: Timelapse Recorder
  * description: Grava um timelapse do seu processo criativo. Rode 1x para iniciar (escolhendo prancheta, formato e cadencia); rode novamente para parar. Cada edicao real vira um frame; ao finalizar, o MP4 e gerado automaticamente pelo vigia instalado no Windows.
- * version: 1.4.0
+ * version: 1.5.0
  * author: Lucas Schmitz (@luk4sschmitz)
  * contact: schiochettschmitz@gmail.com
  */
@@ -11,7 +11,7 @@
 // Timelapse Recorder — liga/desliga por execução:
 //  - 1ª execução: diálogo de configuração e início da gravação.
 //  - 2ª execução: sinaliza parada; o gravador finaliza e marca a sessão com
-//    _render/fps_N — o vigia (tools/timelapse-watcher.ps1, tarefa agendada) monta o MP4 a N fps.
+//    _render/fps_N (fps escolhido ao parar) — o vigia (tools/timelapse-watcher.ps1, tarefa agendada) monta o MP4 a N fps.
 // Frames: Área de Trabalho/AffinityTimelapse/<sessão>/frame_00000.ext
 //
 // Notas de engenharia (validadas ao vivo — ver README):
@@ -81,13 +81,51 @@ function pickPreset(useJpeg) {
     return names.find(n => /^PNG$/i.test(n)) || names.find(n => /^PNG/i.test(n)) || names[0];
 }
 
+// nomes das entradas de uma pasta ([] se não existir)
+function listNames(dir) {
+    const out = [];
+    try {
+        const it = fsys.DirectoryIterator.at(dir);
+        while (!it.done) { out.push(String(it.path).split(/[\\/]/).pop()); it.next(); }
+    } catch (e) { }
+    return out;
+}
+
+// fps enviado pelo pedido de parada (_stop/fps_N); 30 se ausente
+function stopFps() {
+    for (const n of listNames(STOP_FLAG)) {
+        const m = /^fps_(\d+)$/.exec(n);
+        if (m) return Math.min(30, Math.max(1, Number(m[1])));
+    }
+    return 30;
+}
+
 // ---------------------------------------------------------------------------
 
 function requestStop() {
+    // o gravador registra a pasta da sessão dentro de _running
+    const session = listNames(RUNNING_FLAG)[0];
+    const frames = session ? listNames(BASE + '/' + session).filter(n => n.startsWith('frame_')).length : 0;
+    let worked = '';
+    const m = session && /_(\d{4})(\d\d)(\d\d)_(\d\d)(\d\d)(\d\d)$/.exec(session);
+    if (m) {
+        const secs = Math.max(0, Math.round((Date.now() - new Date(m[1], m[2] - 1, m[3], m[4], m[5], m[6])) / 1000));
+        worked = ' em ' + Math.floor(secs / 60) + 'min ' + (secs % 60) + 's de trabalho';
+    }
+
     const dlg = Dialog.create('Timelapse — gravando');
     dlg.initialWidth = 420;
     const g = dlg.addColumn().addGroup('');
-    g.addStaticText('', 'OK para a gravação e gera o vídeo.').setIsFullWidth(true);
+    g.addStaticText('', frames + ' frames gravados' + worked + '. OK para e gera o vídeo.').setIsFullWidth(true);
+    const fpsCtl = g.addUnitValueEditor('FPS do vídeo', UnitType.Number, UnitType.Number, 30, 1, 30);
+    fpsCtl.precision = 0;
+    fpsCtl.showPopupSlider = true;
+    const fpsNow = () => Math.min(30, Math.max(1, Math.round(fpsCtl.value ?? 30)));
+    // texto fixo não pode ser alterado depois de criado: a duração vai num campo só de leitura
+    const durCtl = g.addUnitValueEditor('Vídeo final (s)', UnitType.Number, UnitType.Number, frames / 30, 0, Math.max(1, frames));
+    durCtl.precision = 1;
+    durCtl.isEnabled = false;
+    dlg.onControlValueChangedHandler = () => { durCtl.value = frames / fpsNow(); };
     const forceCtl = g.addCheckBox('Forçar limpeza (gravação travada/crash)', false);
     const r = dlg.runModal();
     if (r?.value !== DialogResult.Ok.value) return;
@@ -96,7 +134,7 @@ function requestStop() {
         try { fsys.removeAll(STOP_FLAG); } catch (e) { }
         app.alert('Sinalizadores limpos. Rode de novo para iniciar nova gravação.');
     } else {
-        fsys.createDirectories(STOP_FLAG);
+        fsys.createDirectories(STOP_FLAG + '/fps_' + fpsNow());
     }
 }
 
@@ -118,8 +156,6 @@ function startRecording() {
     const gCap = col.addGroup('Captura');
     const areaCtl = gCap.addComboBox('Área', areaLabels, artboards.length ? 2 : 0);
     const fmtCtl = gCap.addComboBox('Formato', ['JPEG (recomendado)', 'PNG'], 0);
-    const fpsCtl = gCap.addUnitValueEditor('FPS do vídeo', UnitType.Number, UnitType.Number, 30, 1, 30);
-    fpsCtl.precision = 0;
 
     const gCad = col.addGroup('Cadência');
     const modeCtl = gCad.addComboBox('Capturar', ['A cada edição', 'Intervalo fixo'], 0);
@@ -139,9 +175,9 @@ function startRecording() {
     const areaChoice = areaCtl.selectedIndex ?? 0;
     const useJpeg = fmtCtl.selectedIndex === 0;
     const ext = useJpeg ? 'jpg' : 'png';
-    const fps = Math.min(30, Math.max(1, Math.round(fpsCtl.value ?? 30)));
 
-    const outDir = BASE + '/' + sessionFolderName(doc);
+    const sessionName = sessionFolderName(doc);
+    const outDir = BASE + '/' + sessionName;
     try {
         fsys.createDirectories(outDir);
         if (!fsys.isDirectory(outDir)) throw new Error('pasta não criada');
@@ -162,7 +198,7 @@ function startRecording() {
         try { return doc.history.size >= undoLimit && doc.history.position === doc.history.size; } catch (e) { return false; }
     };
 
-    fsys.createDirectories(RUNNING_FLAG);
+    fsys.createDirectories(RUNNING_FLAG + '/' + sessionName);  // a 2ª execução acha a sessão aqui
 
     const t0 = Date.now();
     let frames = 0, prevKey = histKey(), lastExport = 0, lastEmit = 0, bufBytes = -1;
@@ -195,6 +231,7 @@ function startRecording() {
     const finish = (reason) => {
         done = true;
         Timer.cancelAll();
+        const fps = stopFps();  // escolhido no diálogo de parada
         const wrapUp = () => {
             try { fsys.remove(bufPath); fsys.remove(tmpPath); } catch (e) { }
             try { fsys.createDirectories(outDir + '/_render/fps_' + fps); } catch (e) { }  // sinal p/ vigia montar o MP4 (com o fps)
