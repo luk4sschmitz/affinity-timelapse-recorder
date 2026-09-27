@@ -1,7 +1,7 @@
 /**
  * name: Timelapse Recorder
  * description: Grava um timelapse do seu processo criativo. Rode 1x para iniciar (escolhendo prancheta, formato e cadencia); rode novamente para parar. Cada edicao real vira um frame; ao finalizar, o MP4 e gerado automaticamente pelo vigia instalado no Windows.
- * version: 1.2.0
+ * version: 1.3.0
  * author: Lucas Schmitz (@luk4sschmitz)
  * contact: schiochettschmitz@gmail.com
  */
@@ -20,6 +20,8 @@
 //  - Sandbox: caminhos iniciados com "." dão PERMISSION_DENIED → flags _running/_stop.
 //  - Histórico saturado (undoLimit, padrão 1024): position/size congelam; o script
 //    troca para detecção por bytes do export (determinístico) — v1.1.
+//  - Export no meio de um arraste faz o objeto fugir do cursor. Só exporta logo após
+//    o histórico mudar (= mouse solto); frames são cópias do último export — v1.3.
 
 const { app } = require('/application');
 const { FileExportOptions, FileExportArea } = require('/document');
@@ -32,6 +34,7 @@ const RUNNING_FLAG = BASE + '/_running';
 const STOP_FLAG = BASE + '/_stop';
 
 const POLL_MS = 250;          // cadência de verificação do histórico
+const SAT_MS = 3000;          // histórico cheio: intervalo entre exports de comparação
 const MAX_FRAMES = 20000;     // trava de segurança
 
 function pad(n, w) { return String(n).padStart(w, '0'); }
@@ -159,48 +162,38 @@ function startRecording() {
     fsys.createDirectories(RUNNING_FLAG);
 
     const t0 = Date.now();
-    let frames = 0, lastKey = '', lastShot = 0, lastFrameBytes = -1;
-    let done = false, exporting = false;
+    let frames = 0, prevKey = histKey(), lastExport = 0, lastEmit = 0, bufBytes = -1;
+    let done = false, inflight = null, sawSaturation = false;
 
     const framePath = () => outDir + '/frame_' + pad(frames, 5) + '.' + ext;
-    const candPath = outDir + '/_cand.' + ext;
+    const bufPath = outDir + '/_ultimo.' + ext;       // último estado exportado
+    const tmpPath = outDir + '/_ultimo_tmp.' + ext;   // export em andamento
 
-    // captura assíncrona: a chamada retorna em ms; a renderização não trava a UI.
-    // exporting garante 1 export por vez (sem corrida de numeração).
-    const shoot = (onDone) => {
-        if (exporting) { if (onDone) onDone(); return; }
-        exporting = true;
-        const p = framePath();
-        frames++; lastShot = Date.now(); lastKey = histKey();
-        doc.promises.export(p, opts, area).then(() => {
-            try { lastFrameBytes = Number(fsys.getFileSize(p)); } catch (e) { lastFrameBytes = -1; }
-            exporting = false;
-            if (onDone) onDone();
-        }).catch(() => { frames--; exporting = false; if (onDone) onDone(); });
+    // Exporta o estado atual para o buffer. Resolve true se os bytes mudaram.
+    // Assíncrono (não trava a UI); inflight garante 1 export por vez.
+    const refresh = () => {
+        lastExport = Date.now();
+        inflight = doc.promises.export(tmpPath, opts, area).then(() => {
+            const sz = Number(fsys.getFileSize(tmpPath));
+            fsys.rename(tmpPath, bufPath);    // substitui: o buffer nunca fica pela metade
+            const changed = sz !== bufBytes;
+            bufBytes = sz;
+            return changed;
+        }).catch(() => false).finally(() => { inflight = null; });
+        return inflight;
     };
 
-    // regime saturado: exporta candidato e mantém só se os bytes mudaram
-    const shootIfChanged = () => {
-        if (exporting) return;
-        exporting = true;
-        lastShot = Date.now();
-        doc.promises.export(candPath, opts, area).then(() => {
-            let sz = -2;
-            try { sz = Number(fsys.getFileSize(candPath)); } catch (e) { }
-            if (sz !== lastFrameBytes) {
-                try { fsys.rename(candPath, framePath()); frames++; lastFrameBytes = sz; lastKey = histKey(); } catch (e) { }
-            } else {
-                try { fsys.remove(candPath); } catch (e) { }
-            }
-            exporting = false;
-        }).catch(() => { exporting = false; });
+    // Frame = cópia do buffer (operação de arquivo, sem export).
+    const emit = () => {
+        if (bufBytes < 0) return;
+        try { fsys.copyFile(bufPath, framePath()); frames++; lastEmit = Date.now(); } catch (e) { }
     };
 
     const finish = (reason) => {
         done = true;
         Timer.cancelAll();
         const wrapUp = () => {
-            try { if (fsys.exists(candPath)) fsys.remove(candPath); } catch (e) { }
+            try { fsys.remove(bufPath); fsys.remove(tmpPath); } catch (e) { }
             try { fsys.createDirectories(outDir + '/_render'); } catch (e) { }  // sinal p/ vigia montar o MP4
             try { fsys.removeAll(RUNNING_FLAG); } catch (e) { }
             try { fsys.removeAll(STOP_FLAG); } catch (e) { }
@@ -208,13 +201,14 @@ function startRecording() {
             app.alert(reason + '\n'
                 + frames + ' frames em ' + Math.floor(secs / 60) + 'min ' + (secs % 60) + 's (~' + (frames / 30).toFixed(1) + 's de vídeo a 30fps).\n'
                 + 'O MP4 será gerado automaticamente — o Explorer abre na pasta quando ficar pronto.\n'
-                + 'Pasta: ' + outDir);
+                + 'Pasta: ' + outDir
+                + (sawSaturation ? '\n\nAviso: o histórico de desfazer encheu durante a gravação. Para evitar, aumente Preferências > Limite de Desfazer.' : ''));
         };
-        exporting = false;      // frame final tem prioridade sobre export em voo
-        shoot(wrapUp);
+        // frame final: espera o export em voo, captura o estado final
+        Promise.resolve(inflight).then(refresh).then(ch => { if (ch || fixedMode) emit(); }).then(wrapUp, wrapUp);
     };
 
-    shoot();  // frame inicial
+    refresh().then(emit);  // frame inicial
 
     setInterval(POLL_MS, (err) => {
         if (done) return;
@@ -226,14 +220,26 @@ function startRecording() {
             if (!doc.isOpen) { done = true; Timer.cancelAll(); try { fsys.removeAll(RUNNING_FLAG); } catch (e2) { } return; }
 
             const now = Date.now();
-            if (fixedMode) {
-                if (now - lastShot >= Math.max(gapMs, 500)) shoot();
-            } else if (saturated()) {
-                // histórico cheio: detecta edição comparando bytes do export
-                if (now - lastShot >= Math.max(gapMs, 1000)) shootIfChanged();
-            } else {
-                if (histKey() !== lastKey && now - lastShot >= gapMs) shoot();
+            const key = histKey();
+            const fresh = key !== prevKey;   // edição concluída agora (mouse acabou de soltar)
+            prevKey = key;
+            const sat = saturated();
+            if (sat) sawSaturation = true;
+
+            // Exportar no meio de um arraste faz o objeto "fugir" do cursor. O histórico
+            // só muda ao soltar o mouse, então só exporta logo após uma edição concluída.
+            // Mudança perdida (export em voo ou intervalo mín.) entra no próximo frame.
+            if (!inflight) {
+                if (!sat && fresh && (fixedMode || now - lastExport >= gapMs)) {
+                    refresh().then(ch => { if (ch && !fixedMode) emit(); });
+                } else if (sat && now - lastExport >= Math.max(gapMs, SAT_MS)) {
+                    // histórico cheio: sem sinal de edição; compara bytes de um export periódico
+                    // ponytail: pode cair no meio de um arraste; a API não expõe outro sinal
+                    refresh().then(ch => { if (ch && !fixedMode) emit(); });
+                }
             }
+            // intervalo fixo: ritmo regular copiando o último estado, sem exportar
+            if (fixedMode && now - lastEmit >= Math.max(gapMs, 500)) emit();
         } catch (e) {
             // documento fechado ou erro: encerra limpando flags
             done = true;

@@ -75,7 +75,8 @@ Dê dois cliques em `tools\Instalar Video Automatico.bat`, uma vez por PC. Ele r
     _running\                    existe enquanto há uma gravação ativa
     _stop\                       pedido de parada (criado pela 2ª execução)
     MeuDocumento_20260927_101500\
-      frame_00000.jpg ...        um frame por edição
+      frame_00000.jpg ...        um frame por edição (ou por intervalo)
+      _ultimo.jpg                último estado exportado (só durante a gravação)
       _render\                   sinal para o vigia montar o vídeo
       timelapse_30fps.mp4        o vídeo final
 ```
@@ -85,10 +86,13 @@ As pastas com `_` são sinalizadores: o script e o vigia conversam por elas, por
 ## Como funciona
 
 1. **Liga/desliga por execução**: a 1ª execução configura e inicia; a 2ª cria `_stop`, e o gravador (que continua vivo em segundo plano) captura o frame final e encerra.
-2. **Detecção de edição pelo histórico**: um timer confere `doc.history.position/size` a cada 250 ms. Mudou (inclusive desfazer/refazer), captura um frame.
-3. **Histórico cheio**: quando o limite de desfazer enche (padrão 1024 passos), o Affinity congela esses contadores e as edições novas ficam invisíveis. O script detecta isso e muda de estratégia: exporta um frame candidato e compara os **bytes** com o último frame salvo. O export do Affinity é determinístico (sem mudança, bytes idênticos): se forem iguais, descarta; se forem diferentes, vira frame.
-4. **Sem travar a interface**: as capturas usam `doc.promises.export` (assíncrono, ~5 ms). O export síncrono travaria a tela ~1,2 s por frame em documentos grandes.
-5. **Vídeo**: ao parar, o script cria `_render` na sessão. O vigia confere a cada 5 s, monta `timelapse_30fps.mp4` com ffmpeg (`libx264`, `crf 18`) e abre o Explorer no arquivo. O vigia existe porque o Affinity não pode executar programas externos.
+2. **Detecção de edição pelo histórico**: um timer confere `doc.history.position/size` a cada 250 ms. Mudou (inclusive desfazer/refazer), a edição acabou de ser concluída.
+3. **Captura só depois de soltar o mouse**: exportar a tela enquanto você arrasta um objeto faz o Affinity se perder no arraste, e o objeto foge do cursor. Como o histórico só muda quando o mouse é solto, o script exporta **somente logo após uma edição concluída**, nunca em horário arbitrário. Cada export vai para um arquivo de reserva (`_ultimo.jpg`), e os frames são cópias dele.
+   - **A cada edição**: um frame por edição concluída. Se ela chega antes do intervalo mínimo, aparece no frame seguinte.
+   - **Intervalo fixo**: no ritmo escolhido, o script copia o último estado como próximo frame, mesmo sem edição. O vídeo acompanha o tempo real sem nenhum export fora de hora.
+4. **Histórico cheio**: quando o limite de desfazer enche (padrão 1024 passos), o Affinity congela esses contadores e as edições novas ficam invisíveis. Nesse caso o script exporta a cada 3 s e compara os **bytes** com o export anterior. O export do Affinity é determinístico (sem mudança, bytes idênticos): se forem iguais, descarta; se forem diferentes, vira frame.
+5. **Sem travar a interface**: as capturas usam `doc.promises.export` (assíncrono). O export síncrono travaria a tela ~1,2 s por frame em documentos grandes.
+6. **Vídeo**: ao parar, o script cria `_render` na sessão. O vigia confere a cada 5 s, monta `timelapse_30fps.mp4` com ffmpeg (`libx264`, `crf 18`) e abre o Explorer no arquivo. O vigia existe porque o Affinity não pode executar programas externos.
 
 ## Solução de problemas
 
@@ -105,6 +109,7 @@ As pastas com `_` são sinalizadores: o script e o vigia conversam por elas, por
 ## Limitações
 
 - Somente Windows (o vigia e o montador são PowerShell).
+- **Histórico cheio**: depois de 1024 passos de desfazer no documento, a API não informa mais quando há edição. A captura passa a exportar a cada 3 s e pode voltar a cair no meio de um arraste, com o objeto fugindo do cursor. Para sessões longas, aumente **Preferências > Limite de Desfazer** antes de abrir o documento. Se isso acontecer durante a gravação, o aviso final avisa.
 - Os presets de export do Affinity mudam de nome conforme o idioma; o script os encontra em tempo de execução, então funciona em qualquer idioma.
 - Por segurança, a gravação encerra sozinha ao passar de 20.000 frames ou da duração máxima escolhida.
 
