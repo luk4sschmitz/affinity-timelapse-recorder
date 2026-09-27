@@ -31,8 +31,12 @@ while ($true) {
             foreach ($s in $sessions) {
                 $marker = Join-Path $s.FullName '_render'
                 if (Test-Path $marker) {
-                    Log "Montando video: $($s.Name)"
-                    & powershell -NoProfile -ExecutionPolicy Bypass -File $maker -SessionDir $s.FullName -AutoDownload *> $null
+                    # fps escolhido no script vem como _render\fps_N (sem ele: 30)
+                    $fps = 30
+                    $f = Get-ChildItem $marker -Directory -Filter 'fps_*' -ErrorAction SilentlyContinue | Select-Object -First 1
+                    if ($f -and $f.Name -match '^fps_(\d+)$') { $fps = [int]$Matches[1] }
+                    Log "Montando video: $($s.Name) ($fps fps)"
+                    & powershell -NoProfile -ExecutionPolicy Bypass -File $maker -SessionDir $s.FullName -Fps $fps -AutoDownload *> $null
                     $mp4 = Get-ChildItem $s.FullName -Filter 'timelapse_*.mp4' -ErrorAction SilentlyContinue | Select-Object -First 1
                     if ($mp4) {
                         Remove-Item $marker -Recurse -Force

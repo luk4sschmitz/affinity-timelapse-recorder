@@ -62,6 +62,7 @@ Dê dois cliques em `tools\Instalar Video Automatico.bat`, uma vez por PC. Ele r
 1. Com o documento aberto, rode **Timelapse Recorder** e escolha:
    - **Área**: prancheta específica, spread atual ou documento todo;
    - **Formato**: JPEG (recomendado) ou PNG;
+   - **FPS do vídeo**: de 1 a 30 (padrão 30). Menos fps deixa o vídeo mais lento e mais longo;
    - **Cadência**: a cada edição, ou intervalo fixo;
    - **Intervalo mínimo** entre frames e **duração máxima** da gravação.
 2. Trabalhe normalmente.
@@ -77,8 +78,8 @@ Dê dois cliques em `tools\Instalar Video Automatico.bat`, uma vez por PC. Ele r
     MeuDocumento_20260927_101500\
       frame_00000.jpg ...        um frame por edição (ou por intervalo)
       _ultimo.jpg                último estado exportado (só durante a gravação)
-      _render\                   sinal para o vigia montar o vídeo
-      timelapse_30fps.mp4        o vídeo final
+      _render\fps_30\            sinal para o vigia montar o vídeo (com o fps escolhido)
+      timelapse_30fps.mp4        o vídeo final (o nome traz o fps)
 ```
 
 As pastas com `_` são sinalizadores: o script e o vigia conversam por elas, porque o Affinity não permite outra forma de comunicação. Elas somem sozinhas. Se a montagem do vídeo falhar, a sessão fica marcada com `_render_failed` para você conferir.
@@ -92,7 +93,7 @@ As pastas com `_` são sinalizadores: o script e o vigia conversam por elas, por
    - **Intervalo fixo**: no ritmo escolhido, o script copia o último estado como próximo frame, mesmo sem edição. O vídeo acompanha o tempo real sem nenhum export fora de hora.
 4. **Histórico cheio**: quando o limite de desfazer enche (padrão 1024 passos), o Affinity congela esses contadores e as edições novas ficam invisíveis. Nesse caso o script exporta a cada 3 s e compara os **bytes** com o export anterior. O export do Affinity é determinístico (sem mudança, bytes idênticos): se forem iguais, descarta; se forem diferentes, vira frame.
 5. **Sem travar a interface**: as capturas usam `doc.promises.export` (assíncrono). O export síncrono travaria a tela ~1,2 s por frame em documentos grandes.
-6. **Vídeo**: ao parar, o script cria `_render` na sessão. O vigia confere a cada 5 s, monta `timelapse_30fps.mp4` com ffmpeg (`libx264`, `crf 18`) e abre o Explorer no arquivo. O vigia existe porque o Affinity não pode executar programas externos.
+6. **Vídeo**: ao parar, o script cria `_render\fps_N` na sessão. O vigia confere a cada 5 s, monta `timelapse_Nfps.mp4` com ffmpeg (`libx264`, `crf 18`) no fps escolhido e abre o Explorer no arquivo. O vigia existe porque o Affinity não pode executar programas externos.
 
 ## Solução de problemas
 

@@ -1,7 +1,7 @@
 /**
  * name: Timelapse Recorder
  * description: Grava um timelapse do seu processo criativo. Rode 1x para iniciar (escolhendo prancheta, formato e cadencia); rode novamente para parar. Cada edicao real vira um frame; ao finalizar, o MP4 e gerado automaticamente pelo vigia instalado no Windows.
- * version: 1.3.0
+ * version: 1.4.0
  * author: Lucas Schmitz (@luk4sschmitz)
  * contact: schiochettschmitz@gmail.com
  */
@@ -11,7 +11,7 @@
 // Timelapse Recorder — liga/desliga por execução:
 //  - 1ª execução: diálogo de configuração e início da gravação.
 //  - 2ª execução: sinaliza parada; o gravador finaliza e marca a sessão com
-//    _render — o vigia (tools/timelapse-watcher.ps1, tarefa agendada) monta o MP4.
+//    _render/fps_N — o vigia (tools/timelapse-watcher.ps1, tarefa agendada) monta o MP4 a N fps.
 // Frames: Área de Trabalho/AffinityTimelapse/<sessão>/frame_00000.ext
 //
 // Notas de engenharia (validadas ao vivo — ver README):
@@ -118,6 +118,8 @@ function startRecording() {
     const gCap = col.addGroup('Captura');
     const areaCtl = gCap.addComboBox('Área', areaLabels, artboards.length ? 2 : 0);
     const fmtCtl = gCap.addComboBox('Formato', ['JPEG (recomendado)', 'PNG'], 0);
+    const fpsCtl = gCap.addUnitValueEditor('FPS do vídeo', UnitType.Number, UnitType.Number, 30, 1, 30);
+    fpsCtl.precision = 0;
 
     const gCad = col.addGroup('Cadência');
     const modeCtl = gCad.addComboBox('Capturar', ['A cada edição', 'Intervalo fixo'], 0);
@@ -137,6 +139,7 @@ function startRecording() {
     const areaChoice = areaCtl.selectedIndex ?? 0;
     const useJpeg = fmtCtl.selectedIndex === 0;
     const ext = useJpeg ? 'jpg' : 'png';
+    const fps = Math.min(30, Math.max(1, Math.round(fpsCtl.value ?? 30)));
 
     const outDir = BASE + '/' + sessionFolderName(doc);
     try {
@@ -194,12 +197,12 @@ function startRecording() {
         Timer.cancelAll();
         const wrapUp = () => {
             try { fsys.remove(bufPath); fsys.remove(tmpPath); } catch (e) { }
-            try { fsys.createDirectories(outDir + '/_render'); } catch (e) { }  // sinal p/ vigia montar o MP4
+            try { fsys.createDirectories(outDir + '/_render/fps_' + fps); } catch (e) { }  // sinal p/ vigia montar o MP4 (com o fps)
             try { fsys.removeAll(RUNNING_FLAG); } catch (e) { }
             try { fsys.removeAll(STOP_FLAG); } catch (e) { }
             const secs = Math.round((Date.now() - t0) / 1000);
             app.alert(reason + '\n'
-                + frames + ' frames em ' + Math.floor(secs / 60) + 'min ' + (secs % 60) + 's (~' + (frames / 30).toFixed(1) + 's de vídeo a 30fps).\n'
+                + frames + ' frames em ' + Math.floor(secs / 60) + 'min ' + (secs % 60) + 's (~' + (frames / fps).toFixed(1) + 's de vídeo a ' + fps + 'fps).\n'
                 + 'O MP4 será gerado automaticamente — o Explorer abre na pasta quando ficar pronto.\n'
                 + 'Pasta: ' + outDir
                 + (sawSaturation ? '\n\nAviso: o histórico de desfazer encheu durante a gravação. Para evitar, aumente Preferências > Limite de Desfazer.' : ''));
