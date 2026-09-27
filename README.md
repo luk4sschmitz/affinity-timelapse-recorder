@@ -62,7 +62,6 @@ Dê dois cliques em `tools\Instalar Video Automatico.bat`, uma vez por PC. Ele r
 1. Com o documento aberto, rode **Timelapse Recorder** e escolha:
    - **Área**: prancheta específica, spread atual ou documento todo;
    - **Formato**: JPEG (recomendado) ou PNG;
-   - **FPS do vídeo**: de 1 a 30 (padrão 30). Menos fps deixa o vídeo mais lento e mais longo;
    - **Cadência**: a cada edição, ou intervalo fixo;
    - **Intervalo mínimo** entre frames e **duração máxima** da gravação.
 2. Trabalhe normalmente.
