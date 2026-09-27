@@ -19,6 +19,7 @@ Grava um timelapse do seu processo criativo dentro do [Affinity](https://www.aff
 ```
 timelapse-recorder.js           o script do Affinity
 registry.json                   instalação em 1 clique pelo Script Manager for Affinity
+docs/                           capturas de tela usadas neste README
 tools/
   Instalar Video Automatico.bat   instalador do vigia (dois cliques, 1x por PC)
   install-auto-video.ps1          registra o vigia como tarefa agendada do Windows
@@ -64,8 +65,14 @@ Dê dois cliques em `tools\Instalar Video Automatico.bat`, uma vez por PC. Ele r
    - **Formato**: JPEG (recomendado) ou PNG;
    - **Cadência**: a cada edição, ou intervalo fixo;
    - **Intervalo mínimo** entre frames e **duração máxima** da gravação.
+
+   ![Diálogo de início da gravação](docs/dialogo-inicio.png)
+
 2. Trabalhe normalmente.
 3. Para parar, rode o script de novo. O diálogo mostra **quantos frames foram gravados** e tem um **slider de FPS (1 a 30)**. Ao mexer nele, o campo **Vídeo final (s)** mostra quantos segundos o vídeo terá. Menos fps deixa o vídeo mais lento e mais longo.
+
+   ![Diálogo de parada: frames gravados, FPS e duração do vídeo](docs/dialogo-parada.png)
+
 4. Dê OK. Em alguns segundos o Explorer abre com o MP4 pronto.
 
 ## Pastas criadas
